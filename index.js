@@ -4,13 +4,17 @@ const passport = require('passport')
 const boom = require('@hapi/boom')
 const cookieParser = require('cookie-parser')
 const axios = require('axios')
+const helmet = require('helmet')
 
 const app = express()
 
 app.use(express.json())
+app.use(helmet())
 app.use(cookieParser())
 
 require('./utils/auth/strategies/basic')
+require('./utils/auth/strategies/oauth')
+require('./utils/auth/strategies/facebook')
 
 app.post('/auth/sign-in', async function (req, res, next) {
     passport.authenticate('basic', function (error, data) {
@@ -23,7 +27,7 @@ app.post('/auth/sign-in', async function (req, res, next) {
                 if (error) {
                     next(error)
                 }
-                
+
                 const { token, ...user } = data
 
                 res.cookie('token', token, {
@@ -100,12 +104,53 @@ app.delete('/user-movies/:userMovieId', async function (req, res, next) {
         }
 
         res.status(200).json(data)
-        
+
     } catch (err) {
         next(err)
     }
 })
 
+
+app.get('/auth/google-oauth', passport.authenticate('google-oauth', {
+    scope: ['email', 'profile', 'openid']
+}))
+
+app.get('/auth/google-oauth/callback', passport.authenticate('google-oauth', { session: false }), function (req, res, next) {
+    if (!req.user) {
+        next(boom.unauthorized())
+    }
+
+    const { token, ...user } = req.user
+
+    res.cookie('token', token, {
+        httpOnly: !config.dev,
+        secure: !config.dev
+    })
+
+    res.status(200).json(user)
+})
+
+app.get('/auth/facebook', passport.authenticate('facebook'))
+
+app.get('/auth/facebook/callback', passport.authenticate('facebook', {session: false}), function(req, res, next){
+    if(!req.user){
+        next(boom.unauthorized())
+    }
+
+    const {token, ...user} = req.user
+
+    res.cookie("token", token, {
+        httpOnly: !config.dev,
+        secure: !config.dev
+    })
+
+    res.status(200).json(user)
+})
+
+
+
+
 app.listen(config.port, () => {
     console.log(`Listening on http://localhost:${config.port}`)
 })
+
